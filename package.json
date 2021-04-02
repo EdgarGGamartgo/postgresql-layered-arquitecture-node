@@ -1,0 +1,24 @@
+{
+  "name": "postgres-layered-arquitecture-nodejs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "ts-node-dev src/index.ts",
+    "pub": "git add . && git commit -m \"Updates\" && git push && git status"
+  },
+  "keywords": [],
+  "author": "Edgar Martinez",
+  "license": "ISC",
+  "dependencies": {
+    "@oregtickets/common": "^1.0.4",
+    "@types/express": "^4.17.9",
+    "@types/uuid": "^8.3.0",
+    "express": "^4.17.1",
+    "express-async-errors": "^3.1.1",
+    "express-validator": "^6.9.1",
+    "ts-node-dev": "^1.1.1",
+    "typescript": "^4.1.3",
+    "uuid": "^8.3.2"
+  }
+}
