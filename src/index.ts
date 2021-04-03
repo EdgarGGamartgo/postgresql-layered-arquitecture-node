@@ -5,6 +5,7 @@ const start = async() => {
     
     try {
         await db.authenticate();
+        await db.sync({ force: true, alter: false });
         await db.query(seeds);
         console.log('Connection has been established successfully.');
 

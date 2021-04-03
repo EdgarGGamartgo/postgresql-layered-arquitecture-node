@@ -1,10 +1,8 @@
 import express, { Request, Response } from 'express'
-import { body, param, query } from 'express-validator'
+import { body, param } from 'express-validator'
 import { BadRequestError, validateRequest } from '@oregtickets/common'
-import { User, UserAttrs } from './../models/User'
-import { v4 as uuidv4 } from 'uuid';
+import { User } from './../models/User'
 import { isDate } from './../services/isDate'
-import { getAutoSuggestUsers, sortByLogin } from './../services/getAutoSuggestUsers'
 
 const router = express.Router()
 
@@ -30,68 +28,31 @@ router.get('/api/users/:mode',
     validateRequest,
     async (req: Request, res: Response) => {
         const { mode } = req.params;
-        if (mode === 'true') {
-            const users = User.filter(u => u.isDeleted === true)
-            res.status(200).send(users);
-        } else if (mode === 'false') {
-            const users = User.filter(u => u.isDeleted === false)
-            res.status(200).send(users);
-        } else if (mode === 'all') {
-            res.status(200).send(User);
+        try {
+            if (mode === 'true') {
+                const users = await User.findAll({
+                    where: {
+                        is_deleted: true
+                    }
+                })
+                res.status(200).send(users);
+            } else if (mode === 'false') {
+                const users = await User.findAll({
+                    where: {
+                        is_deleted: false
+                    }
+                })
+                res.status(200).send(users);
+            } else if (mode === 'all') {
+                const users = await User.findAll({})
+                res.status(200).send(users);
+            }
+        } catch (e) {
+            console.log(e)
+            throw new BadRequestError('Cant retrieve users')
         }
     })
 
-router.get('/api/user-auto-suggest', [
-    query('sort')
-        .trim()
-        .notEmpty()
-        .isString()
-        .custom(sort => {
-            if (sort === 'oldest') {
-                return true
-            } else if (sort === 'newest') {
-                return true
-            } else {
-                throw new BadRequestError('sort must be oldest or newest')
-            }
-        })
-        .withMessage('You must supply a valid sort'),
-    query('limit')
-        .trim()
-        .notEmpty()
-        .isNumeric()
-        .custom(limit => {
-            if (limit >= 0) {
-                return true
-            } else {
-                throw new BadRequestError('limit must be greater or equal than 0')
-            }
-        })
-        .withMessage('You must supply a valid numeric limit greater or equal than 0'),
-     query('filter')
-        .trim()
-        .notEmpty()
-        .isString()
-        .custom(date => {
-            if (isDate(date) || (date.length > 0 && date.length <= 4 && Number.isInteger(+date))) {
-                return true
-            } else {
-                throw new BadRequestError('filter must be a valid date ISOString Date or just a numeric year')
-            }
-        })
-        .withMessage('You must supply a valid date for filter')   
-],
-validateRequest,
-async (req: Request, res: Response) => {
-    const { sort, filter, limit } = req.query
-    try {
-        const filteredUsers: UserAttrs[] = getAutoSuggestUsers(filter as string, +limit!)
-        const users: UserAttrs[] = sortByLogin(sort as string, filteredUsers)
-        res.status(200).send(users)
-    } catch (e) {
-        throw new BadRequestError('User does not exist!!!');
-    }
-})
 
 router.get('/api/user/:id',
     [
@@ -104,11 +65,19 @@ router.get('/api/user/:id',
     validateRequest,
     async (req: Request, res: Response) => {
         const { id } = req.params;
-        const user = User.find(u => u.id === id && !u.isDeleted);
-        if (user) {
+        try {
+            const user = await User.findOne({
+                where: {
+                    is_deleted: false,
+                    id: id
+                }
+            })
             res.status(200).send(user);
+        } catch (e) {
+            console.log(e)
+            throw new BadRequestError('Cant retrieve user!');
         }
-        throw new BadRequestError('User does not exist!!!');
+        
     })
 
 router.get('/api/user/auto-suggest', async (req: Request, res: Response) => {
@@ -148,15 +117,19 @@ router.post('/api/user', [
 ],
     validateRequest, async (req: Request, res: Response) => {
         const { login, password, age } = req.body;
-        const user = {
-            id: uuidv4(),
-            login,
-            password,
-            age: +age,
-            isDeleted: false
+        try {
+            const user = {
+                login,
+                password,
+                age: +age,
+                is_deleted: false
+            }
+            await User.create(user)
+            res.status(201).send(user)
+        } catch (e) {
+            console.log(e)
+            throw new BadRequestError('User could not get created!')
         }
-        User.push(user)
-        res.status(201).send(user)
     })
 
 router.put('/api/user', [
@@ -196,15 +169,19 @@ router.put('/api/user', [
         .withMessage('You must supply age')
 ],
     validateRequest, async (req: Request, res: Response) => {
-        const { login, password, age, id } = req.body;
-        let user = User.find(u => u.id === id && !u.isDeleted);
-        if (user) {
-            user = {
-                login, password, age: +age, id, isDeleted: false
-            }
+        const { id } = req.body;
+        try {
+            const user = await User.update(req.body,{
+                where: {
+                    is_deleted: false,
+                    id: id
+                }
+            })            
             res.status(200).send(user);
+        } catch (e) {
+            console.log(e)
+            throw new BadRequestError('Error updating the user');
         }
-        throw new BadRequestError('User does not exist!!!');
     })
 
 router.delete('/api/user/:id',
@@ -216,12 +193,18 @@ router.delete('/api/user/:id',
             .withMessage('You must supply a valid UUID')
     ], async (req: Request, res: Response) => {
         const { id } = req.params;
-        let userIndex = User.findIndex((u => u.id === id && !u.isDeleted));
-        if (userIndex !== -1) {
-            User[userIndex].isDeleted = true
-            res.status(200).send(User[userIndex]);
+        try {
+            const user = await User.update({ is_deleted: true },{
+                where: {
+                    is_deleted: false,
+                    id: id
+                }
+            })
+            res.status(200).send(user);
+        } catch (e) {
+            console.log(e)
+            throw new BadRequestError('User could not get deleted!')
         }
-        throw new BadRequestError('User does not exist!!!')
     })
 
 export { router as UserController }
